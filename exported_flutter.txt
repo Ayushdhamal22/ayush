@@ -1,0 +1,220 @@
+// lib/main.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'routes.dart';
+
+void main() {
+  runApp(const ProviderScope(child: MyApp()));
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      routerConfig: router,
+      title: 'Daily Task Scheduler',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        fontFamily: 'Inter',
+      ),
+    );
+  }
+}
+
+// lib/routes.dart
+import 'package:go_router/go_router.dart';
+import 'screens/home_screen.dart';
+
+final router = GoRouter(
+  routes: [
+    GoRoute(
+      path: '/',
+      builder: (context, state) => const HomeScreen(),
+    ),
+  ],
+);
+
+// lib/models/task.dart
+class Task {
+  final String id;
+  final String title;
+  final DateTime time;
+  final String category;
+  final String priority;
+  bool completed;
+
+  Task({
+    required this.id,
+    required this.title,
+    required this.time,
+    required this.category,
+    required this.priority,
+    this.completed = false,
+  });
+
+  factory Task.fromJson(Map<String, dynamic> json) {
+    return Task(
+      id: json['id'],
+      title: json['data']['title'],
+      time: DateTime.parse(json['data']['time']),
+      category: json['data']['category'],
+      priority: json['data']['priority'],
+      completed: json['data']['completed'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'time': time.toIso8601String(),
+      'category': category,
+      'priority': priority,
+      'completed': completed,
+    };
+  }
+}
+
+// lib/providers/task_provider.dart
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../models/task.dart';
+
+final taskProvider = StateNotifierProvider<TaskNotifier, List<Task>>((ref) {
+  return TaskNotifier();
+});
+
+class TaskNotifier extends StateNotifier<List<Task>> {
+  TaskNotifier() : super([]) {
+    loadTasks();
+  }
+
+  static const String apiUrl = 'https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/db';
+  static const String token = '3qfll9jiHCdJCZ90peo3fUBSL4u2';
+  final String userId = 'user_${DateTime.now().millisecondsSinceEpoch}';
+  static const String appSlug = 'task-scheduler-app';
+
+  Future<void> loadTasks() async {
+    try {
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'userId': userId,
+          'appSlug': appSlug,
+          'action': 'read',
+          'table': 'tasks',
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final tasks = (data['data'] as List)
+            .map((task) => Task.fromJson(task))
+            .toList();
+        state = tasks;
+      }
+    } catch (e) {
+      print('Error loading tasks: $e');
+    }
+  }
+
+  Future<void> addTask(Task task) async {
+    try {
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'userId': userId,
+          'appSlug': appSlug,
+          'action': 'create',
+          'table': 'tasks',
+          'data': task.toJson(),
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        loadTasks();
+      }
+    } catch (e) {
+      print('Error adding task: $e');
+    }
+  }
+
+  // Add other CRUD operations...
+}
+
+// lib/screens/home_screen.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import '../widgets/task_form.dart';
+import '../widgets/task_list.dart';
+import '../widgets/progress_overview.dart';
+
+class HomeScreen extends HookConsumerWidget {
+  const HomeScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Daily Task Scheduler',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Organize your day efficiently',
+                style: TextStyle(
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 4,
+                    child: TaskForm(),
+                  ),
+                  SizedBox(width: 16),
+                  Expanded(
+                    flex: 8,
+                    child: Column(
+                      children: [
+                        TaskList(),
+                        SizedBox(height: 16),
+                        ProgressOverview(),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Continue with implementing TaskForm, TaskList, and ProgressOverview widgets...
+// Additionally, implement notification system and other utility functions...
